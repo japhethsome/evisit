@@ -2,45 +2,67 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import Image from "next/image";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   UserPlus,
   Users,
   Building2,
-  ShieldCheck,
   QrCode,
   Settings,
+  LogIn,
+  LogOut,
+  ShieldCheck,
 } from "lucide-react";
 import { getOfficeSettings, type OfficeSettings } from "@/lib/office";
+import { isAuthenticated, logout } from "@/lib/auth";
 import styles from "./Sidebar.module.css";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/checkin", label: "Check In", icon: UserPlus },
   { href: "/visitors", label: "Visitors Log", icon: Users },
-  { href: "/register", label: "Public Visitor Form", icon: QrCode },
-  { href: "/admin", label: "Admin & Settings", icon: Settings },
+  { href: "/register", label: "Visitor Form (QR)", icon: QrCode },
+  { href: "/admin", label: "Admin Settings", icon: Settings },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [office, setOffice] = useState<OfficeSettings | null>(null);
+  const [authed, setAuthed] = useState(false);
 
   useEffect(() => {
     setOffice(getOfficeSettings());
-  }, []);
+    setAuthed(isAuthenticated());
+  }, [pathname]);
+
+  function handleLogout() {
+    logout();
+    setAuthed(false);
+    router.push("/login");
+  }
 
   return (
     <aside className={styles.sidebar}>
       {/* Logo */}
       <div className={styles.logo}>
-        <div className={styles.logoIcon}>
-          <ShieldCheck size={22} />
+        <div style={{ position: "relative", width: 44, height: 44, flexShrink: 0 }}>
+          <Image
+            src="/logo.png"
+            alt="eVisitors Logo"
+            width={44}
+            height={44}
+            style={{ objectFit: "contain", borderRadius: 8 }}
+            priority
+          />
         </div>
-        <div>
+        <div style={{ overflow: "hidden" }}>
           <span className={styles.logoText}>eVisitors</span>
-          <span className={styles.logoSub}>{office?.name || "Rongo University"}</span>
+          <span className={styles.logoSub} style={{ whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden", display: "block" }}>
+            {office?.name || "Rongo University"}
+          </span>
         </div>
       </div>
 
@@ -63,14 +85,36 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Bottom info */}
+      {/* Bottom info & Auth */}
       <div className={styles.bottom}>
         <div className={styles.orgCard}>
           <Building2 size={16} className={styles.orgIcon} />
           <div>
             <p className={styles.orgName}>{office?.name || "Rongo University"}</p>
-            <p className={styles.orgSub}>Reception: {office?.phone || "0708992882"}</p>
+            <p className={styles.orgSub}>Hotline: {office?.phone || "0708992882"}</p>
           </div>
+        </div>
+
+        <div style={{ marginTop: 8 }}>
+          {authed ? (
+            <button
+              onClick={handleLogout}
+              className="btn btn-ghost"
+              style={{ width: "100%", justifyContent: "flex-start", fontSize: 13, padding: "8px 12px", color: "#f87171" }}
+            >
+              <LogOut size={15} />
+              <span>Sign Out (Admin)</span>
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              className="btn btn-ghost"
+              style={{ width: "100%", justifyContent: "flex-start", fontSize: 13, padding: "8px 12px" }}
+            >
+              <LogIn size={15} />
+              <span>Admin Login</span>
+            </Link>
+          )}
         </div>
       </div>
     </aside>

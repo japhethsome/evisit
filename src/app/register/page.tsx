@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   ShieldCheck,
   UserPlus,
@@ -13,6 +13,10 @@ import {
   Building2,
   MapPin,
   Navigation,
+  CheckSquare,
+  Square,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import LocationMap from "@/components/LocationMap";
 import { addVisitor } from "@/lib/visitors";
@@ -35,17 +39,17 @@ const PURPOSES = [
 type Step = "info" | "form" | "done";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [office, setOffice] = useState<OfficeSettings | null>(null);
   const [step, setStep] = useState<Step>("info");
   const [loading, setLoading] = useState(false);
   const [passId, setPassId] = useState("");
+  const [consentGiven, setConsentGiven] = useState(true);
   const [visitorLocation, setVisitorLocation] = useState<{
     lat: number;
     lng: number;
     accuracy?: number;
   } | null>(null);
-  const [locationStatus, setLocationStatus] = useState<"detecting" | "found" | "denied">("detecting");
+  const [locState, setLocState] = useState<"idle" | "detecting" | "acquired" | "denied">("detecting");
 
   const [form, setForm] = useState({
     name: "",
@@ -59,29 +63,34 @@ export default function RegisterPage() {
   });
   const [errors, setErrors] = useState<Partial<typeof form>>({});
 
+  function requestLocation() {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      setLocState("denied");
+      return;
+    }
+
+    setLocState("detecting");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setVisitorLocation({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        });
+        setLocState("acquired");
+      },
+      (err) => {
+        console.warn("Geolocation permission error:", err);
+        setLocState("denied");
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
+  }
+
   useEffect(() => {
     const currentOffice = getOfficeSettings();
     setOffice(currentOffice);
-
-    // Request visitor's live GPS location
-    if (typeof window !== "undefined" && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setVisitorLocation({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            accuracy: pos.coords.accuracy,
-          });
-          setLocationStatus("found");
-        },
-        () => {
-          setLocationStatus("denied");
-        },
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
-    } else {
-      setLocationStatus("denied");
-    }
+    requestLocation();
   }, []);
 
   function set(field: keyof typeof form, value: string) {
@@ -104,7 +113,7 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
+    await new Promise((r) => setTimeout(r, 700));
 
     const visitor = addVisitor({
       name: form.name.trim(),
@@ -115,7 +124,7 @@ export default function RegisterPage() {
       purpose: form.purpose.trim(),
       idType: form.idType as "national-id",
       idNumber: form.idNumber.trim(),
-      location: visitorLocation ? {
+      location: (consentGiven && visitorLocation) ? {
         lat: visitorLocation.lat,
         lng: visitorLocation.lng,
         accuracy: visitorLocation.accuracy,
@@ -140,16 +149,21 @@ export default function RegisterPage() {
     return (
       <div className={styles.page}>
         <div className={styles.card}>
-          {/* Header */}
+          {/* Header with Logo */}
           <div className={styles.header}>
-            <div className={styles.logoRow}>
-              <div className={styles.logoIcon}><ShieldCheck size={22} /></div>
-              <span className={styles.logoText}>eVisitors</span>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+              <Image
+                src="/logo.png"
+                alt="eVisitors Logo"
+                width={80}
+                height={80}
+                style={{ objectFit: "contain", borderRadius: 12 }}
+                priority
+              />
             </div>
             <h1 className={styles.title}>Welcome to {office.name}</h1>
             <p className={styles.subtitle}>
-              You are registering to visit <strong>{office.name}</strong>. Please check
-              the office location and reception contact below, then proceed to fill in your visit details.
+              Visitor Registration & Security Clearance Portal · <strong>{office.name}</strong>
             </p>
           </div>
 
@@ -187,31 +201,81 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Visitor Location Status */}
-          {visitorLocation && (
-            <div style={{
-              background: "rgba(59, 130, 246, 0.08)",
-              border: "1px solid rgba(59, 130, 246, 0.25)",
-              padding: "12px 16px",
-              borderRadius: "var(--radius-sm)",
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              fontSize: "13px",
-              color: "var(--color-text-secondary)"
-            }}>
-              <Navigation size={16} style={{ color: "#3b82f6", flexShrink: 0 }} />
-              <div>
-                <strong style={{ color: "var(--color-text-primary)" }}>Your Live GPS Location:</strong>{" "}
-                {visitorLocation.lat.toFixed(4)}, {visitorLocation.lng.toFixed(4)}
-                {distance !== null && (
-                  <span> ({distance <= 0.2 ? "You are on campus" : `${distance} km from ${office.name}`})</span>
-                )}
+          {/* Location Consent & Live Tracker Box */}
+          <div style={{
+            background: "rgba(17, 24, 39, 0.9)",
+            border: "1px solid rgba(59, 130, 246, 0.3)",
+            borderRadius: "var(--radius-md)",
+            padding: "16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "12px",
+          }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setConsentGiven(!consentGiven)}
+                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: consentGiven ? "#60a5fa" : "var(--color-text-muted)", marginTop: 2 }}
+                id="consent-toggle-btn"
+                aria-label="Toggle location consent"
+              >
+                {consentGiven ? <CheckSquare size={20} /> : <Square size={20} />}
+              </button>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)" }}>
+                  Visitor Live Location Tracking Consent
+                </p>
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.4 }}>
+                  I consent to sharing my live GPS coordinates with Rongo University Reception and Security for verification, safety management, and campus directions.
+                </p>
               </div>
             </div>
-          )}
 
-          {/* Map */}
+            {consentGiven && (
+              <div style={{
+                background: "rgba(59, 130, 246, 0.08)",
+                border: "1px solid rgba(59, 130, 246, 0.2)",
+                padding: "10px 14px",
+                borderRadius: "var(--radius-sm)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+                fontSize: 12
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Navigation size={15} style={{ color: locState === "acquired" ? "var(--color-success)" : "#60a5fa" }} />
+                  <div>
+                    {locState === "detecting" && <span>Acquiring your live GPS coordinates…</span>}
+                    {locState === "acquired" && visitorLocation && (
+                      <span>
+                        <strong>GPS Acquired:</strong> {visitorLocation.lat.toFixed(4)}, {visitorLocation.lng.toFixed(4)}
+                        {distance !== null && ` (${distance <= 0.2 ? "On Campus" : `${distance} km from Main Office`})`}
+                      </span>
+                    )}
+                    {locState === "denied" && (
+                      <span style={{ color: "#fca5a5" }}>
+                        Location permission not granted. Click Refresh to enable GPS.
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={requestLocation}
+                  className="btn btn-ghost"
+                  style={{ padding: "4px 8px", fontSize: 11, gap: 4 }}
+                  title="Refresh GPS"
+                >
+                  <RefreshCw size={12} className={locState === "detecting" ? styles.spin : ""} />
+                  Refresh
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Campus Map */}
           <LocationMap
             officeLat={office.lat}
             officeLng={office.lng}
@@ -239,9 +303,15 @@ export default function RegisterPage() {
       <div className={styles.page}>
         <div className={styles.card}>
           <div className={styles.header}>
-            <div className={styles.logoRow}>
-              <div className={styles.logoIcon}><ShieldCheck size={22} /></div>
-              <span className={styles.logoText}>eVisitors</span>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+              <Image
+                src="/logo.png"
+                alt="eVisitors Logo"
+                width={70}
+                height={70}
+                style={{ objectFit: "contain", borderRadius: 10 }}
+                priority
+              />
             </div>
             <h1 className={styles.title}>Visitor Registration Form</h1>
             <p className={styles.subtitle}>
@@ -328,7 +398,7 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Location Notice */}
+            {/* Location Tracking Summary */}
             <div style={{
               display: "flex",
               alignItems: "center",
@@ -339,11 +409,11 @@ export default function RegisterPage() {
               padding: "10px 14px",
               borderRadius: "var(--radius-sm)"
             }}>
-              <MapPin size={14} style={{ color: visitorLocation ? "var(--color-success)" : "var(--color-text-muted)" }} />
+              <MapPin size={14} style={{ color: (consentGiven && visitorLocation) ? "var(--color-success)" : "var(--color-text-muted)" }} />
               <span>
-                {visitorLocation
-                  ? `Live location acquired (${visitorLocation.lat.toFixed(4)}, ${visitorLocation.lng.toFixed(4)}) - distance to campus: ${distance} km`
-                  : "Location permission allows reception to verify your arrival distance"}
+                {consentGiven && visitorLocation
+                  ? `Live GPS location verified (${visitorLocation.lat.toFixed(4)}, ${visitorLocation.lng.toFixed(4)}) - Distance: ${distance} km`
+                  : "Location consent will be attached to visitor record for security check"}
               </span>
             </div>
 
@@ -370,10 +440,20 @@ export default function RegisterPage() {
     <div className={styles.page}>
       <div className={styles.card}>
         <div className={styles.successState}>
-          <div className={styles.successIcon}><Check size={36} /></div>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+            <Image
+              src="/logo.png"
+              alt="eVisitors Logo"
+              width={75}
+              height={75}
+              style={{ objectFit: "contain", borderRadius: 10 }}
+              priority
+            />
+          </div>
+          <div className={styles.successIcon}><Check size={32} /></div>
           <h2 className={styles.successTitle}>Registration Complete!</h2>
           <p className={styles.successSub}>
-            Your visit has been recorded in the {office.name} visitors system. Reception and security have received your registration.
+            Your visit has been recorded in the {office.name} visitors system. Reception and security have received your registration and location verification.
           </p>
 
           <div className={styles.passIdBox}>
@@ -399,7 +479,7 @@ export default function RegisterPage() {
             color: "var(--color-text-secondary)"
           }}>
             <Phone size={14} />
-            <span>Reception: <strong>{office.phone}</strong></span>
+            <span>Reception Hotline: <strong>{office.phone}</strong></span>
           </div>
 
           <div style={{ display: "flex", gap: 12, marginTop: 16, width: "100%", justifyContent: "center" }}>
