@@ -1,42 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Check, Loader2 } from "lucide-react";
+import { UserPlus, Check, Loader2, MapPin } from "lucide-react";
 import { addVisitor } from "@/lib/visitors";
+import { getOfficeSettings, type OfficeSettings } from "@/lib/office";
 import styles from "./CheckInForm.module.css";
 
 const PURPOSES = [
-  "Business Meeting",
+  "Academic Collaboration",
+  "Admission / Student Inquiry",
+  "Official University Meeting",
   "Interview",
-  "Delivery",
+  "Delivery / Courier",
   "Audit / Inspection",
   "Partnership Discussion",
-  "Support / Maintenance",
-  "Training",
+  "Support / Technical Maintenance",
   "Personal Visit",
   "Other",
-];
-
-const HOSTS = [
-  "Reception",
-  "CEO Office",
-  "CFO Office",
-  "HR Department",
-  "IT Department",
-  "Sales Team",
-  "Marketing Team",
-  "Procurement",
-  "Legal Department",
-  "John Mwangi",
-  "Sarah Kamau",
-  "Peter Ndung'u",
 ];
 
 export default function CheckInForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [office, setOffice] = useState<OfficeSettings | null>(null);
+  const [visitorLocation, setVisitorLocation] = useState<{
+    lat: number;
+    lng: number;
+    accuracy?: number;
+  } | null>(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -51,6 +44,25 @@ export default function CheckInForm() {
 
   const [errors, setErrors] = useState<Partial<typeof form>>({});
 
+  useEffect(() => {
+    const off = getOfficeSettings();
+    setOffice(off);
+
+    if (typeof window !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setVisitorLocation({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+          });
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    }
+  }, []);
+
   function set(field: keyof typeof form, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
     setErrors((e) => ({ ...e, [field]: undefined }));
@@ -60,7 +72,7 @@ export default function CheckInForm() {
     const errs: Partial<typeof form> = {};
     if (!form.name.trim()) errs.name = "Full name is required";
     if (!form.phone.trim()) errs.phone = "Phone number is required";
-    if (!form.host.trim()) errs.host = "Host / person to visit is required";
+    if (!form.host.trim()) errs.host = "Host office / person to visit is required";
     if (!form.purpose.trim()) errs.purpose = "Purpose of visit is required";
     if (!form.idNumber.trim()) errs.idNumber = "ID number is required";
     setErrors(errs);
@@ -71,8 +83,8 @@ export default function CheckInForm() {
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    // Simulate brief processing
-    await new Promise((r) => setTimeout(r, 800));
+    await new Promise((r) => setTimeout(r, 600));
+
     const visitor = addVisitor({
       name: form.name.trim(),
       email: form.email.trim(),
@@ -82,12 +94,19 @@ export default function CheckInForm() {
       purpose: form.purpose.trim(),
       idType: form.idType as "national-id",
       idNumber: form.idNumber.trim(),
+      location: visitorLocation ? {
+        lat: visitorLocation.lat,
+        lng: visitorLocation.lng,
+        accuracy: visitorLocation.accuracy,
+        timestamp: new Date().toISOString(),
+      } : undefined,
     });
+
     setLoading(false);
     setSuccess(true);
     setTimeout(() => {
       router.push(`/visitors/${visitor.id}`);
-    }, 1000);
+    }, 800);
   }
 
   if (success) {
@@ -97,10 +116,24 @@ export default function CheckInForm() {
           <Check size={32} />
         </div>
         <h3>Visitor Checked In!</h3>
-        <p>Generating visitor pass…</p>
+        <p>Generating digital visitor badge…</p>
       </div>
     );
   }
+
+  const hosts = office?.hosts || [
+    "Main Reception & Information Desk",
+    "Security Desk & Gate Control",
+    "Vice Chancellor's Office",
+    "Deputy Vice Chancellor (ASA)",
+    "Deputy Vice Chancellor (AFP)",
+    "Registrar (Academic Affairs)",
+    "Dean of Students",
+    "Finance & Accounts Office",
+    "Procurement & Supplies",
+    "Human Resource Office",
+    "ICT Directorate",
+  ];
 
   return (
     <form onSubmit={handleSubmit} className={styles.form} noValidate>
@@ -119,7 +152,7 @@ export default function CheckInForm() {
             {errors.name && <p className={styles.error}>{errors.name}</p>}
           </div>
           <div className={styles.field}>
-            <label className="label" htmlFor="company">Company / Organization</label>
+            <label className="label" htmlFor="company">Institution / Company</label>
             <input
               id="company"
               className="input"
@@ -133,7 +166,7 @@ export default function CheckInForm() {
             <input
               id="phone"
               className={`input ${errors.phone ? styles.inputError : ""}`}
-              placeholder="+254 700 000 000"
+              placeholder="e.g. 0700 000 000"
               value={form.phone}
               onChange={(e) => set("phone", e.target.value)}
             />
@@ -157,15 +190,15 @@ export default function CheckInForm() {
         <h3 className={styles.sectionTitle}>Visit Details</h3>
         <div className={styles.grid2}>
           <div className={styles.field}>
-            <label className="label" htmlFor="host">Host / Person to Visit *</label>
+            <label className="label" htmlFor="host">Office / Host to Visit *</label>
             <select
               id="host"
               className={`input ${errors.host ? styles.inputError : ""}`}
               value={form.host}
               onChange={(e) => set("host", e.target.value)}
             >
-              <option value="">Select host…</option>
-              {HOSTS.map((h) => (
+              <option value="">Select office / department…</option>
+              {hosts.map((h) => (
                 <option key={h} value={h}>{h}</option>
               ))}
             </select>
@@ -203,7 +236,7 @@ export default function CheckInForm() {
               <option value="national-id">National ID</option>
               <option value="passport">Passport</option>
               <option value="drivers-license">Driver's License</option>
-              <option value="other">Other</option>
+              <option value="other">Other ID</option>
             </select>
           </div>
           <div className={styles.field}>
@@ -211,7 +244,7 @@ export default function CheckInForm() {
             <input
               id="idNumber"
               className={`input ${errors.idNumber ? styles.inputError : ""}`}
-              placeholder="Enter ID number"
+              placeholder="Enter ID or Passport number"
               value={form.idNumber}
               onChange={(e) => set("idNumber", e.target.value)}
             />
@@ -219,6 +252,22 @@ export default function CheckInForm() {
           </div>
         </div>
       </div>
+
+      {visitorLocation && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          fontSize: 12,
+          color: "var(--color-text-muted)",
+          padding: "8px 12px",
+          background: "var(--color-surface-2)",
+          borderRadius: "var(--radius-sm)"
+        }}>
+          <MapPin size={13} style={{ color: "var(--color-primary-hover)" }} />
+          <span>Live GPS coordinates attached: {visitorLocation.lat.toFixed(4)}, {visitorLocation.lng.toFixed(4)}</span>
+        </div>
+      )}
 
       <div className={styles.footer}>
         <button
@@ -230,7 +279,7 @@ export default function CheckInForm() {
           {loading ? (
             <>
               <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
-              Processing…
+              Checking In…
             </>
           ) : (
             <>

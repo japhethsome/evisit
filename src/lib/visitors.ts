@@ -1,4 +1,15 @@
+import { getOfficeSettings, calculateDistanceKm } from "./office";
+
 export type VisitorStatus = "checked-in" | "checked-out" | "expected";
+
+export interface VisitorLocation {
+  lat: number;
+  lng: number;
+  accuracy?: number;
+  timestamp?: string;
+  distanceKm?: number;
+  city?: string;
+}
 
 export interface Visitor {
   id: string;
@@ -13,6 +24,7 @@ export interface Visitor {
   checkOutTime?: string; // ISO string
   status: VisitorStatus;
   company?: string;
+  location?: VisitorLocation;
 }
 
 const STORAGE_KEY = "evisitors_data";
@@ -40,8 +52,21 @@ export function addVisitor(
   data: Omit<Visitor, "id" | "status" | "checkInTime">
 ): Visitor {
   const visitors = getVisitors();
+  const office = getOfficeSettings();
+  
+  let location = data.location;
+  if (location && typeof location.lat === "number" && typeof location.lng === "number") {
+    const dist = calculateDistanceKm(location.lat, location.lng, office.lat, office.lng);
+    location = {
+      ...location,
+      distanceKm: dist,
+      timestamp: location.timestamp || new Date().toISOString(),
+    };
+  }
+
   const newVisitor: Visitor = {
     ...data,
+    location,
     id: generateId(),
     status: "checked-in",
     checkInTime: new Date().toISOString(),

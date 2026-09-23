@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut, Eye, User } from "lucide-react";
+import { LogOut, Eye, User, MapPin } from "lucide-react";
 import type { Visitor } from "@/lib/visitors";
 import { formatTime, formatDate, getDuration, checkOutVisitor } from "@/lib/visitors";
 import StatusBadge from "./StatusBadge";
@@ -45,6 +45,7 @@ export default function VisitorTable({
             <th>Visitor</th>
             <th>Host</th>
             <th>Purpose</th>
+            <th>Live Location</th>
             <th>Check In</th>
             {!compact && <th>Duration</th>}
             <th>Status</th>
@@ -78,6 +79,24 @@ export default function VisitorTable({
                 </span>
               </td>
               <td>
+                {v.location ? (
+                  <Link
+                    href={`/visitors/${v.id}#location`}
+                    className={styles.locationBadge}
+                    title={`GPS: ${v.location.lat.toFixed(4)}, ${v.location.lng.toFixed(4)}`}
+                  >
+                    <MapPin size={12} style={{ color: "#3b82f6" }} />
+                    {v.location.distanceKm !== undefined
+                      ? v.location.distanceKm <= 0.2
+                        ? "On Campus"
+                        : `${v.location.distanceKm} km away`
+                      : "GPS Captured"}
+                  </Link>
+                ) : (
+                  <span className={styles.noLocation}>—</span>
+                )}
+              </td>
+              <td>
                 <div>
                   <p style={{ fontSize: 13, color: "var(--color-text-primary)" }}>
                     {formatTime(v.checkInTime)}
@@ -99,7 +118,7 @@ export default function VisitorTable({
               </td>
               <td>
                 <div className={styles.actions}>
-                  <Link href={`/visitors/${v.id}`} className="btn btn-ghost" style={{ padding: "6px 10px" }}>
+                  <Link href={`/visitors/${v.id}`} className="btn btn-ghost" style={{ padding: "6px 10px" }} title="View Visitor Pass & Map">
                     <Eye size={15} />
                   </Link>
                   {v.status === "checked-in" && (

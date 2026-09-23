@@ -17,6 +17,9 @@ import {
   CheckCircle2,
   Timer,
   Printer,
+  MapPin,
+  Navigation,
+  ExternalLink,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import StatusBadge from "@/components/StatusBadge";
@@ -28,6 +31,7 @@ import {
   getDuration,
   type Visitor,
 } from "@/lib/visitors";
+import { getOfficeSettings, type OfficeSettings } from "@/lib/office";
 import styles from "./pass.module.css";
 
 const ID_LABELS: Record<string, string> = {
@@ -40,9 +44,11 @@ const ID_LABELS: Record<string, string> = {
 export default function VisitorPassPage({ params }: PageProps<"/visitors/[id]">) {
   const router = useRouter();
   const [visitor, setVisitor] = useState<Visitor | null>(null);
+  const [office, setOffice] = useState<OfficeSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setOffice(getOfficeSettings());
     params.then(({ id }) => {
       const v = getVisitorById(id);
       setVisitor(v ?? null);
@@ -92,6 +98,8 @@ export default function VisitorPassPage({ params }: PageProps<"/visitors/[id]">)
     .join("")
     .toUpperCase();
 
+  const officeName = office?.name || "Rongo University";
+
   return (
     <div className={styles.layout}>
       <Sidebar />
@@ -126,7 +134,7 @@ export default function VisitorPassPage({ params }: PageProps<"/visitors/[id]">)
             <div className={styles.passHeader}>
               <div className={styles.passHeaderInner}>
                 <div className={styles.passLogo}>
-                  <span>eVisitors</span>
+                  <span>eVisitors · {officeName}</span>
                 </div>
                 <StatusBadge status={visitor.status} />
               </div>
@@ -155,7 +163,7 @@ export default function VisitorPassPage({ params }: PageProps<"/visitors/[id]">)
                 <div className={styles.detailRow}>
                   <User size={15} className={styles.detailIcon} />
                   <div>
-                    <span className={styles.detailLabel}>Host</span>
+                    <span className={styles.detailLabel}>Host / Office</span>
                     <span className={styles.detailValue}>{visitor.host}</span>
                   </div>
                 </div>
@@ -190,11 +198,10 @@ export default function VisitorPassPage({ params }: PageProps<"/visitors/[id]">)
                 </div>
               </div>
 
-              {/* QR placeholder */}
+              {/* QR Code box */}
               <div className={styles.qrWrap}>
                 <div className={styles.qrBox}>
                   <svg viewBox="0 0 80 80" width="80" height="80" fill="none">
-                    {/* Simplified QR pattern */}
                     <rect x="0" y="0" width="32" height="32" rx="4" fill="currentColor" opacity="0.15"/>
                     <rect x="4" y="4" width="24" height="24" rx="2" fill="currentColor" opacity="0.3"/>
                     <rect x="10" y="10" width="12" height="12" rx="1" fill="currentColor"/>
@@ -222,14 +229,102 @@ export default function VisitorPassPage({ params }: PageProps<"/visitors/[id]">)
 
           {/* Side details panel */}
           <div className={styles.detailsPanel}>
-            <div className={`glass-card ${styles.detailGroup} animate-fade-in-up`} style={{ animationDelay: "80ms" }}>
+            {/* Live Location Panel for Admin */}
+            <div id="location" className={`glass-card ${styles.detailGroup} animate-fade-in-up`} style={{ animationDelay: "60ms", borderLeft: "3px solid #3b82f6" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <h3 className={styles.panelTitle} style={{ margin: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                  <MapPin size={16} style={{ color: "#3b82f6" }} />
+                  Visitor Live Location
+                </h3>
+                {visitor.location && (
+                  <span style={{
+                    fontSize: 11,
+                    padding: "3px 8px",
+                    borderRadius: "var(--radius-full)",
+                    background: "rgba(59, 130, 246, 0.15)",
+                    color: "#60a5fa",
+                    fontWeight: 600
+                  }}>
+                    {visitor.location.distanceKm !== undefined
+                      ? visitor.location.distanceKm <= 0.2
+                        ? "At Rongo University"
+                        : `${visitor.location.distanceKm} km away`
+                      : "GPS Located"}
+                  </span>
+                )}
+              </div>
+
+              {visitor.location ? (
+                <div>
+                  <div className={styles.infoList} style={{ marginBottom: 12 }}>
+                    <div className={styles.infoItem}>
+                      <Navigation size={14} className={styles.infoIcon} />
+                      <div>
+                        <span className={styles.infoLabel}>GPS Coordinates</span>
+                        <span className={styles.infoValue} style={{ fontFamily: "monospace", fontSize: 13 }}>
+                          {visitor.location.lat.toFixed(5)}, {visitor.location.lng.toFixed(5)}
+                        </span>
+                      </div>
+                    </div>
+                    {visitor.location.accuracy && (
+                      <div className={styles.infoItem}>
+                        <Clock size={14} className={styles.infoIcon} />
+                        <div>
+                          <span className={styles.infoLabel}>GPS Precision</span>
+                          <span className={styles.infoValue}>Within ±{Math.round(visitor.location.accuracy)} meters</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* OpenStreetMap Iframe for visitor's location */}
+                  <div style={{
+                    borderRadius: "var(--radius-sm)",
+                    overflow: "hidden",
+                    border: "1px solid var(--color-border)",
+                    height: 160,
+                    marginBottom: 10,
+                    background: "var(--color-surface-2)"
+                  }}>
+                    <iframe
+                      title="Visitor Location Map"
+                      width="100%"
+                      height="100%"
+                      frameBorder="0"
+                      scrolling="no"
+                      src={`https://www.openstreetmap.org/export/embed.html?bbox=${visitor.location.lng - 0.006}%2C${visitor.location.lat - 0.004}%2C${visitor.location.lng + 0.006}%2C${visitor.location.lat + 0.004}&layer=mapnik&marker=${visitor.location.lat}%2C${visitor.location.lng}`}
+                      style={{ filter: "brightness(0.9) contrast(1.1)" }}
+                    />
+                  </div>
+
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${visitor.location.lat},${visitor.location.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-secondary"
+                    style={{ width: "100%", justifyContent: "center", fontSize: 13, padding: "8px 12px" }}
+                  >
+                    <ExternalLink size={14} /> Open Exact Location in Google Maps
+                  </a>
+                </div>
+              ) : (
+                <p style={{ color: "var(--color-text-muted)", fontSize: 13, margin: 0 }}>
+                  No GPS coordinates were captured for this visitor (check-in was submitted without location permissions enabled).
+                </p>
+              )}
+            </div>
+
+            {/* Contact info */}
+            <div className={`glass-card ${styles.detailGroup} animate-fade-in-up`} style={{ animationDelay: "100ms" }}>
               <h3 className={styles.panelTitle}>Contact Information</h3>
               <div className={styles.infoList}>
                 <div className={styles.infoItem}>
                   <Phone size={15} className={styles.infoIcon} />
                   <div>
                     <span className={styles.infoLabel}>Phone</span>
-                    <span className={styles.infoValue}>{visitor.phone || "—"}</span>
+                    <a href={`tel:${visitor.phone}`} className={styles.infoValue} style={{ color: "var(--color-primary-hover)", textDecoration: "none" }}>
+                      {visitor.phone || "—"}
+                    </a>
                   </div>
                 </div>
                 <div className={styles.infoItem}>
@@ -243,7 +338,7 @@ export default function VisitorPassPage({ params }: PageProps<"/visitors/[id]">)
                   <div className={styles.infoItem}>
                     <Building2 size={15} className={styles.infoIcon} />
                     <div>
-                      <span className={styles.infoLabel}>Company</span>
+                      <span className={styles.infoLabel}>Institution / Organization</span>
                       <span className={styles.infoValue}>{visitor.company}</span>
                     </div>
                   </div>
@@ -251,6 +346,7 @@ export default function VisitorPassPage({ params }: PageProps<"/visitors/[id]">)
               </div>
             </div>
 
+            {/* Identification */}
             <div className={`glass-card ${styles.detailGroup} animate-fade-in-up`} style={{ animationDelay: "140ms" }}>
               <h3 className={styles.panelTitle}>Identification</h3>
               <div className={styles.infoList}>
@@ -273,7 +369,8 @@ export default function VisitorPassPage({ params }: PageProps<"/visitors/[id]">)
               </div>
             </div>
 
-            <div className={`glass-card ${styles.detailGroup} animate-fade-in-up`} style={{ animationDelay: "200ms" }}>
+            {/* Timeline */}
+            <div className={`glass-card ${styles.detailGroup} animate-fade-in-up`} style={{ animationDelay: "180ms" }}>
               <h3 className={styles.panelTitle}>Visit Timeline</h3>
               <div className={styles.timeline}>
                 <div className={styles.timelineItem}>
@@ -307,7 +404,7 @@ export default function VisitorPassPage({ params }: PageProps<"/visitors/[id]">)
                       }}
                     />
                     <div>
-                      <span className={styles.infoLabel}>Currently Inside</span>
+                      <span className={styles.infoLabel}>Currently On Campus</span>
                       <span className={styles.infoValue} style={{ color: "var(--color-primary-hover)" }}>
                         {getDuration(visitor.checkInTime)} elapsed
                       </span>
